@@ -7,7 +7,7 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 ## Features
 
 - **Data Preparation**  
-  • Load and parse orbital element CSVs and raw manoeuvre logs  
+  • Load and parse orbital element CSVs and raw manoeuvre logs (sourced from David Shorten, 2023)
   • Normalize timestamps and slice by date ranges
 
 - **Exploratory Data Analysis (EDA)**  
@@ -17,15 +17,13 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 - **Modelling**  
   • **ARIMAModel**: Residual-based anomaly scoring, grid search, PR-AUC evaluation  
   • **XGBoostModel**: Lag-only or full-feature regression, residual scoring, grid search  
-  • Segmented modelling for non-stationary regimes
+  • **Segmented modelling** for non-stationary regimes (SARAL)
 
 - **Evaluation**  
-  • Event-matching precision & recall (Zhao 2021) with configurable buffer days  
-  • Standalone script for one-time PR calculation
+  • Event-matching precision & recall with configurable buffer days  
+  • Standalone script for one-time PR calculation (provided by David Shorten, 2025)
 
 ---
-
-## Repository Structure
 
 ## Repository Structure
 
@@ -34,7 +32,7 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 ├── datapreparation.py             # Data loaders & parsers
 ├── satellite_eda.py               # EDA plotting utilities
 ├── models.py                      # ARIMA & XGBoost model classes
-├── event_precision_recall.py      # Precision/recall matching logic
+├── event_precision_recall.py      # Precision/recall matching logic (provided by David Shorten, 2025)
 ├── requirements.txt               # Project dependencies
 ├── README.md                      # Documentation (this file)
 └── examples/                      # Application notebooks
@@ -65,14 +63,14 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 1. **Initialize Satellite**
 ```python
 from datapreparation import Satellite
-sat = Satellite("path/to/orbit.csv", "path/to/man.txt")
+sat = Satellite("path/to/orbital_element.csv", "path/to/manoeuvre_logs.txt")
 ```
 
 2. **Run EDA**
    ```python
    from satellite_eda import SatelliteEDA
    eda = SatelliteEDA(sat)
-   eda.all_with_man(subplots_wrap=(3,2))
+   eda.all_with_man(subplots_wrap=(3,2)) # Create a figure arranged in 3 rows and 2 columns of subplots
    ```
 3. **Train & evaluate models**
    ```python
@@ -91,7 +89,7 @@ sat = Satellite("path/to/orbit.csv", "path/to/man.txt")
     buffer=3
   )
   print(xgb.best_params, xgb.eval_results['pr_auc'])
-   ```
+  ```
 
 ## Code Quality & Organization
 
@@ -109,4 +107,4 @@ sat = Satellite("path/to/orbit.csv", "path/to/man.txt")
 
 ## License
 
-MIT © Your Name
+MIT © Huilin Wang
