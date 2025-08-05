@@ -48,15 +48,15 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 ## Installation
 
 1. **Clone the repo**  
-   ```bash
-   git clone https://github.com/wh01019/Research_project.git
-   cd Research_project
-   ```
+ ```bash
+ git clone https://github.com/wh01019/Research_project.git
+ cd Research_project
+ ```
 
 2. **Install dependencies**
-  ```bash
-  pip install -r requirements.txt
-  ```
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
@@ -67,11 +67,12 @@ sat = Satellite("path/to/orbital_element.csv", "path/to/manoeuvre_logs.txt")
 ```
 
 2. **Run EDA**
-   ```python
-   from satellite_eda import SatelliteEDA
-   eda = SatelliteEDA(sat)
-   eda.all_with_man(subplots_wrap=(3,2)) # Create a figure arranged in 3 rows and 2 columns of subplots
-   ```
+ ```python
+ from satellite_eda import SatelliteEDA
+ eda = SatelliteEDA(sat)
+ eda.all_with_man(subplots_wrap=(3,2)) # Create a figure arranged in 3 rows and 2 columns of subplots
+ ```
+
 3. **Train & evaluate models**
 ```python
 from models import ARIMAModel, XGBoostModel
