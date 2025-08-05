@@ -27,18 +27,22 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 
 ## Repository Structure
 
+## Repository Structure
+
+```plaintext
 .
-├── datapreparation.py # Data loaders & parsers
-├── satellite_eda.py # EDA plotting utilities
-├── models.py # ARIMA & XGBoost model classes
-├── event_precision_recall.py # Precision/recall matching logic
-├── requirements.txt # Project dependencies
-├── README.md # Documentation (this file)
-└── examples/ # Application notebooks
-├── EDA.ipynb # Full EDA workflow
-├── Evaluation-regular.ipynb # PR evaluation on regular satellites
-├── Evaluation-irregular-test.ipynb # PR evaluation on irregular satellites
-└── SARAL_segmented_model.ipynb # Segmented modelling example for SARAL
+├── datapreparation.py             # Data loaders & parsers
+├── satellite_eda.py               # EDA plotting utilities
+├── models.py                      # ARIMA & XGBoost model classes
+├── event_precision_recall.py      # Precision/recall matching logic
+├── requirements.txt               # Project dependencies
+├── README.md                      # Documentation (this file)
+└── examples/                      # Application notebooks
+    ├── EDA.ipynb                  # Full EDA workflow
+    ├── Evaluation-regular.ipynb   # PR evaluation on regular satellites
+    ├── Evaluation-irregular-test.ipynb  # PR evaluation on irregular satellites
+    └── SARAL_segmented_model.ipynb  # Segmented modelling example for SARAL
+```
 
 
 ---
