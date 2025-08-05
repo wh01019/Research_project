@@ -108,4 +108,4 @@ print(xgb.best_params, xgb.eval_results['pr_auc'])
 
 ## License
 
-MIT © Huilin Wang
+This project is licensed under the [MIT License](LICENSE).
