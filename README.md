@@ -38,7 +38,7 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 └── examples/                      # Application notebooks
     ├── EDA.ipynb                  # Full EDA workflow
     ├── Evaluation-regular.ipynb   # PR evaluation on regular satellites
-    ├── Evaluation-irregular-test.ipynb  # PR evaluation on irregular satellites
+    ├── Evaluation-irregular.ipynb  # PR evaluation on irregular satellites
     └── SARAL_segmented_model.ipynb  # Segmented modelling example for SARAL
 ```
 
