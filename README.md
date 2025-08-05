@@ -51,16 +51,11 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 
 1. **Clone the repo**  
    ```bash
-   git clone https://your-repo-url.git
-   cd your-repo
+   git clone https://github.com/wh01019/Research_project.git
+   cd Research_project
    ```
 
-2. **Create & activate a Python environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-3. **Install dependencies**
+2. **Install dependencies**
   ```bash
   pip install -r requirements.txt
   ```
