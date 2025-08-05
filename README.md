@@ -73,23 +73,23 @@ sat = Satellite("path/to/orbital_element.csv", "path/to/manoeuvre_logs.txt")
    eda.all_with_man(subplots_wrap=(3,2)) # Create a figure arranged in 3 rows and 2 columns of subplots
    ```
 3. **Train & evaluate models**
-   ```python
-   from models import ARIMAModel, XGBoostModel
+```python
+from models import ARIMAModel, XGBoostModel
 
-  # ARIMA grid search
-  arima = ARIMAModel(sat)
-  arima.grid_search({'p':[0,1], 'd':[0,1], 'q':[0,1]}, buffer=3)
-  print(arima.best_params, arima.eval_results['pr_auc'])
-  
-  # XGBoost grid search
-  xgb = XGBoostModel(sat)
-  xgb.grid_search(
+# ARIMA grid search
+arima = ARIMAModel(sat)
+arima.grid_search({'p':[0,1], 'd':[0,1], 'q':[0,1]}, buffer=3)
+print(arima.best_params, arima.eval_results['pr_auc'])
+
+# XGBoost grid search
+xgb = XGBoostModel(sat)
+xgb.grid_search(
     {'n_lags':[3,5], 'n_estimators':[50,100], 'max_depth':[3,5],
      'learning_rate':[0.1], 'colsample_bytree':[0.8]},
     buffer=3
-  )
-  print(xgb.best_params, xgb.eval_results['pr_auc'])
-  ```
+)
+print(xgb.best_params, xgb.eval_results['pr_auc'])
+```
 
 ## Code Quality & Organization
 
