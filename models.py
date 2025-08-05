@@ -12,86 +12,6 @@ from sklearn.exceptions import UndefinedMetricWarning
 import warnings
 
 
-# def train_segmented_models_with_search(satellite, break_times, model_class, model_grid, buffer=3, model_kwargs=None):
-#     """
-#     For each segment (based on break_times), perform grid search and store the best model.
-#     Return:
-#         - segment_models: list of best model instances per segment
-#         - segment_ranges: list of (start, end) datetime tuples per segment
-#         - all_residuals: combined residuals from all segments
-#     """
-#     if model_kwargs is None:
-#         model_kwargs = {}
-
-#     all_times = [satellite.df_orbit.index.min()] + break_times + [satellite.df_orbit.index.max()]
-#     segment_models = []
-#     segment_ranges = []
-#     residual_list = []
-
-#     for i in range(len(all_times) - 1):
-#         start, end = all_times[i], all_times[i + 1]
-#         sub_sat = satellite.copy_range(start, end)
-#         segment_ranges.append((start, end))
-
-#         print(f"\n🔹 Segment {i+1}: {start.date()} ~ {end.date()}")
-
-#         # Grid search
-#         model = model_class(sub_sat)
-#         if model.name == "ARIMA":
-#             model.grid_search(model_grid, buffer)
-#         elif model.name == "XGBoost":
-#             model.grid_search(model_grid, buffer)
-#         else:
-#             raise ValueError("Unsupported model")
-
-#         segment_models.append(model)
-#         residual_list.append(model.residuals)
-
-#     all_residuals = pd.concat(residual_list).sort_index()
-#     return segment_models, segment_ranges, all_residuals
-
-# def evaluate_global_precision_recall(all_residuals, satellite, buffer):
-#     df_true = satellite.df_man
-#     series_truth = pd.to_datetime(df_true['manoeuvre_date'])
-
-#     s_scores = pd.Series(StandardScaler().fit_transform(all_residuals.to_frame()).flatten(),
-#                          index=all_residuals.index,
-#                          name="residual_zscore")
-
-#     y_true = s_scores.index.isin(series_truth).astype(int)
-
-#     _, _, thresholds = precision_recall_curve(y_true, s_scores)
-
-#     precisions, recalls = [], []
-#     for thr in thresholds:
-#         p, r = compute_simple_matching_precision_recall_for_one_threshold(
-#             matching_max_days=buffer,
-#             threshold=thr,
-#             series_ground_truth_manoeuvre_timestamps=series_truth,
-#             series_predictions=s_scores
-#         )
-#         precisions.append(p)
-#         recalls.append(r)
-
-#     recalls = np.array(recalls)
-#     precisions = np.array(precisions)
-#     sorted_indices = np.argsort(recalls)
-#     recalls = recalls[sorted_indices]
-#     precisions = precisions[sorted_indices]
-
-#     pr_auc = auc(recalls, precisions)
-
-#     return {
-#         "buffer": buffer,
-#         "precisions": precisions,
-#         "recalls": recalls,
-#         "thresholds": thresholds,
-#         "pr_auc": pr_auc
-#     }
-
-
-
-
 # === Utility Functions ===
 def get_std_Brouwer(satellite):
     data = satellite.df_orbit['Brouwer mean motion']
@@ -160,6 +80,10 @@ def mad_score(residuals):
     mad = np.median(np.abs(residuals - med))
     return 0.6745 * (residuals - med) / mad
 
+
+
+
+# === ARIMA Model ===
 class ARIMAModel:
     def __init__(self, satellite):
         self.name = "ARIMA"
@@ -276,6 +200,9 @@ class ARIMAModel:
         self.satellite.arima = self
 
 
+
+
+# === XGBoost Model ===
 class XGBoostModel:
     def __init__(self, satellite, brouwer_only=False):
         self.name = "XGBoost"
@@ -413,3 +340,84 @@ class XGBoostModel:
 
 
         self.satellite.xgb = self
+
+
+
+
+# === Segmented Model for SARAL ===
+def train_segmented_models_with_search(satellite, break_times, model_class, model_grid, buffer=3, model_kwargs=None):
+    """
+    For each segment (based on break_times), perform grid search and store the best model.
+    Return:
+        - segment_models: list of best model instances per segment
+        - segment_ranges: list of (start, end) datetime tuples per segment
+        - all_residuals: combined residuals from all segments
+    """
+    if model_kwargs is None:
+        model_kwargs = {}
+
+    all_times = [satellite.df_orbit.index.min()] + break_times + [satellite.df_orbit.index.max()]
+    segment_models = []
+    segment_ranges = []
+    residual_list = []
+
+    for i in range(len(all_times) - 1):
+        start, end = all_times[i], all_times[i + 1]
+        sub_sat = satellite.copy_range(start, end)
+        segment_ranges.append((start, end))
+
+        print(f"\n Segment {i+1}: {start.date()} ~ {end.date()}")
+
+        # Grid search
+        model = model_class(sub_sat)
+        if model.name == "ARIMA":
+            model.grid_search(model_grid, buffer)
+        elif model.name == "XGBoost":
+            model.grid_search(model_grid, buffer)
+        else:
+            raise ValueError("Unsupported model")
+
+        segment_models.append(model)
+        residual_list.append(model.residuals)
+
+    all_residuals = pd.concat(residual_list).sort_index()
+    return segment_models, segment_ranges, all_residuals
+
+def evaluate_global_precision_recall(all_residuals, satellite, buffer):
+    df_true = satellite.df_man
+    series_truth = pd.to_datetime(df_true['manoeuvre_date'])
+
+    s_scores = pd.Series(StandardScaler().fit_transform(all_residuals.to_frame()).flatten(),
+                         index=all_residuals.index,
+                         name="residual_zscore")
+
+    y_true = s_scores.index.isin(series_truth).astype(int)
+
+    _, _, thresholds = precision_recall_curve(y_true, s_scores)
+
+    precisions, recalls = [], []
+    for thr in thresholds:
+        p, r = compute_simple_matching_precision_recall_for_one_threshold(
+            matching_max_days=buffer,
+            threshold=thr,
+            series_ground_truth_manoeuvre_timestamps=series_truth,
+            series_predictions=s_scores
+        )
+        precisions.append(p)
+        recalls.append(r)
+
+    recalls = np.array(recalls)
+    precisions = np.array(precisions)
+    sorted_indices = np.argsort(recalls)
+    recalls = recalls[sorted_indices]
+    precisions = precisions[sorted_indices]
+
+    pr_auc = auc(recalls, precisions)
+
+    return {
+        "buffer": buffer,
+        "precisions": precisions,
+        "recalls": recalls,
+        "thresholds": thresholds,
+        "pr_auc": pr_auc
+    }
