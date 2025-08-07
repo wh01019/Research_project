@@ -16,8 +16,7 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 
 - **Modelling**  
   • **ARIMAModel**: Residual-based anomaly scoring, grid search, PR-AUC evaluation  
-  • **XGBoostModel**: Lag-only or full-feature regression, residual scoring, grid search  
-  • **Segmented modelling** for non-stationary regimes (SARAL)
+  • **XGBoostModel**: Brouwer Mean Motion-only or full-feature regression, residual scoring, grid search  
 
 - **Evaluation**  
   • Event-matching precision & recall with configurable buffer days  
@@ -31,7 +30,7 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
 .
 ├── datapreparation.py             # Data loaders & parsers
 ├── satellite_eda.py               # EDA plotting utilities
-├── models.py                      # ARIMA & XGBoost model classes
+├── models.py                      # ARIMA & XGBoost model classes for training, evaluating and grid search
 ├── event_precision_recall.py      # Precision/recall matching logic (provided by David Shorten, 2025)
 ├── requirements.txt               # Project dependencies
 ├── README.md                      # Documentation (this file)
@@ -39,7 +38,6 @@ A Python toolkit for unsupervised detection of satellite manoeuvres from Brouwer
     ├── EDA.ipynb                  # Full EDA workflow
     ├── Evaluation-regular.ipynb   # PR evaluation on regular satellites
     ├── Evaluation-irregular.ipynb  # PR evaluation on irregular satellites
-    └── SARAL_segmented_model.ipynb  # Segmented modelling example for SARAL
 ```
 
 
@@ -86,7 +84,7 @@ print(arima.best_params, arima.eval_results['pr_auc'])
 xgb = XGBoostModel(sat)
 xgb.grid_search(
     {'n_lags':[3,5], 'n_estimators':[50,100], 'max_depth':[3,5],
-     'learning_rate':[0.1], 'colsample_bytree':[0.8]},
+     'learning_rate':[0.1], 'colsample_bytree':[0.8], 'diff_order':[0,1,2]},
     buffer=3
 )
 print(xgb.best_params, xgb.eval_results['pr_auc'])
