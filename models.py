@@ -19,6 +19,13 @@ def get_std_Brouwer(satellite):
     data.index = satellite.df_orbit.index
     return data
 
+def get_diff_std_brouwer(satellite):
+    data = satellite.df_orbit['Brouwer mean motion']
+    diff_data = data.diff().dropna() # first-order-differencing
+    scaler = StandardScaler()
+    std_diff = scaler.fit_transform(diff_data.values.reshape(-1, 1)).flatten()
+    return pd.Series(std_diff, index=diff_data.index)
+
 def create_manoeuvre_buffer(df, buffer):
     df['actual_manoeuvre_buffered'] = 0
     man_dates = df[df['actual_manoeuvre'] == 1].index
@@ -38,6 +45,23 @@ def create_lag_features(series, n_lags):
         y.append(series[i])
         y_index.append(series.index[i])
     return np.array(X), np.array(y), pd.Index(y_index)
+
+def diff_brouwer(satellite):
+    df = satellite.df_orbit.copy()
+
+    df['bmm_diff']       = df['Brouwer mean motion'].diff()
+
+    df['bmm_diff_lag1']  = df['bmm_diff'].shift(1)   # ε_{t-1}
+    df['bmm_diff_lag2']  = df['bmm_diff'].shift(2)   # ε_{t-2}
+
+    df = df.dropna()
+
+    X = df[['bmm_diff_lag1', 'bmm_diff_lag2']].values
+    y = df['Brouwer mean motion'].values
+    y_index = df.index
+
+    return X, y, y_index
+
 
 def add_features(satellite, n_lags):
     df = satellite.df_orbit.copy()
@@ -202,12 +226,14 @@ class ARIMAModel:
 
 
 
-# === XGBoost Model ===
 class XGBoostModel:
-    def __init__(self, satellite, brouwer_only=False):
+    def __init__(self, satellite, brouwer_only=True, diff_order=0):
         self.name = "XGBoost"
         self.satellite = satellite
         self.brouwer_only = brouwer_only
+        # Number of differences to apply: 0 = no diff, 1 = first-order, 2 = second-order, etc.
+        self.diff_order = diff_order
+        self.model = None
         self.fitted = None
         self.residuals = None
         self.eval_results = None
@@ -215,41 +241,44 @@ class XGBoostModel:
         self.grid_search_results = None
 
     def train(self, n_lags, n_estimators, max_depth, learning_rate, colsample_bytree):
+        # 1) Load the Brouwer mean motion series
+        series = get_std_Brouwer(self.satellite)  # pandas Series of Brouwer mean motion
+        
+        # 2) Apply differencing if requested
+        if self.diff_order > 0:
+            series = series.diff(self.diff_order)
+        series = series.dropna()
+
+        # 3) Create lag features for the series
+        X, y, y_index = create_lag_features(series, n_lags)
+
+        # 4) Initialize and fit the XGBoost regressor
         self.model = XGBRegressor(
-                    n_estimators=n_estimators,
-                    max_depth=max_depth,
-                    learning_rate=learning_rate,
-                    colsample_bytree=colsample_bytree,
-                    objective='reg:squarederror',
-                    random_state=42
-                )
-
-        if self.brouwer_only:
-            data_series = get_std_Brouwer(self.satellite)
-            X, y, y_index = create_lag_features(data_series, n_lags)
-        else:
-            X, y, y_index = add_features(self.satellite, n_lags)
-            stdScaler = StandardScaler()
-            X = stdScaler.fit_transform(X)
-
-        X = np.asarray(X).reshape(-1, X.shape[-1] if len(X.shape) > 1 else 1)
-
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            learning_rate=learning_rate,
+            colsample_bytree=colsample_bytree,
+            objective='reg:squarederror',
+            random_state=42
+        )
         self.model.fit(X, y)
+
+        # 5) Store fitted values and compute residuals
         preds = self.model.predict(X)
         self.fitted = pd.Series(preds, index=y_index)
         y_series = pd.Series(y, index=y_index)
         self.residuals = y_series - self.fitted
 
     def evaluate(self, buffer):
+        # Load true manoeuvre timestamps
         df_true = self.satellite.df_man
-        series_truth = pd.Series(
-            pd.to_datetime(df_true['manoeuvre_date']).values,
-            dtype='datetime64[ns]'
-        )
+        truth_times = pd.to_datetime(df_true['manoeuvre_date'])
 
-        s_scores = pd.Series(np.abs(self.residuals), index=self.residuals.index)
-        y_true = s_scores.index.isin(series_truth).astype(int)
+        # Use absolute residuals as anomaly scores
+        scores = pd.Series(np.abs(self.residuals), index=self.residuals.index)
 
+        # Build binary ground truth: 1 at timestamps with manoeuvres, else 0
+        y_true = scores.index.isin(truth_times).astype(int)
         if y_true.sum() == 0:
             warnings.warn("No manoeuvre events in this segment. Skipping PR evaluation.", UndefinedMetricWarning)
             self.eval_results = {
@@ -261,21 +290,23 @@ class XGBoostModel:
             }
             return
 
-        _, _, thresholds = precision_recall_curve(y_true, s_scores)
+        # Compute thresholds from precision–recall curve
+        _, _, thresholds = precision_recall_curve(y_true, scores)
 
+        # Compute precision and recall at each threshold using buffer-aware matching
         precisions, recalls = [], []
         for thr in thresholds:
             p, r = compute_simple_matching_precision_recall_for_one_threshold(
                 matching_max_days=buffer,
                 threshold=thr,
-                series_ground_truth_manoeuvre_timestamps=series_truth,
-                series_predictions=s_scores
+                series_ground_truth_manoeuvre_timestamps=truth_times,
+                series_predictions=scores
             )
             precisions.append(p)
             recalls.append(r)
 
+        # Compute area under the PR curve
         pr_auc = auc(recalls, precisions)
-
         self.eval_results = {
             'buffer': buffer,
             'precisions': precisions,
@@ -285,23 +316,30 @@ class XGBoostModel:
         }
 
     def grid_search(self, param_grid, buffer, n_jobs=-1):
+        # Expect param_grid to include 'diff_order': list of int
+        keys = ['n_lags', 'n_estimators', 'max_depth',
+                'learning_rate', 'colsample_bytree', 'diff_order']
+
+        # Build all combinations of hyperparameters
         param_list = list(product(
             param_grid['n_lags'],
             param_grid['n_estimators'],
             param_grid['max_depth'],
             param_grid['learning_rate'],
             param_grid['colsample_bytree'],
+            param_grid['diff_order']
         ))
 
-        def train_and_eval(n_lags, n_estimators, max_depth, learning_rate, colsample_bytree):
-            model = XGBoostModel(self.satellite, brouwer_only=self.brouwer_only)
-            model.train(
-                n_lags,
-                n_estimators=n_estimators,
-                max_depth=max_depth,
-                learning_rate=learning_rate,
-                colsample_bytree=colsample_bytree
+        def train_and_eval(n_lags, n_estimators, max_depth,
+                           learning_rate, colsample_bytree, diff_order):
+            # Instantiate a new model for each combination
+            model = XGBoostModel(
+                satellite=self.satellite,
+                brouwer_only=self.brouwer_only,
+                diff_order=diff_order
             )
+            # Train and evaluate
+            model.train(n_lags, n_estimators, max_depth, learning_rate, colsample_bytree)
             model.evaluate(buffer)
             return {
                 'n_lags': n_lags,
@@ -309,36 +347,26 @@ class XGBoostModel:
                 'max_depth': max_depth,
                 'learning_rate': learning_rate,
                 'colsample_bytree': colsample_bytree,
+                'diff_order': diff_order,
                 'pr_auc': model.eval_results['pr_auc'],
                 'model': model
             }
 
+        # Run grid search in parallel
         results = Parallel(n_jobs=n_jobs)(
-            delayed(train_and_eval)(n_lags, n_estimators, max_depth, learning_rate, colsample_bytree)
-            for (n_lags, n_estimators, max_depth, learning_rate, colsample_bytree) in param_list
+            delayed(train_and_eval)(*params) for params in param_list
         )
 
-        best_result = max(results, key=lambda x: x['pr_auc'])
-        best_model = best_result['model']
-
-        # copy best model's state to self
-        self.n_lags = best_result['n_lags']
-        self.fitted = best_model.fitted
-        self.residuals = best_model.residuals
-        self.eval_results = best_model.eval_results
-        self.best_params = {
-            'n_lags': best_result['n_lags'],
-            'n_estimators': best_result['n_estimators'],
-            'max_depth': best_result['max_depth'],
-            'learning_rate': best_result['learning_rate'],
-            'colsample_bytree': best_result['colsample_bytree']
-        }
-
+        # Select the best result by PR-AUC
+        best = max(results, key=lambda x: x['pr_auc'])
+        self.best_params = {k: best[k] for k in keys}
+        self.fitted = best['model'].fitted
+        self.residuals = best['model'].residuals
+        self.eval_results = best['model'].eval_results
+        # Record all grid search outcomes (excluding model objects)
         self.grid_search_results = pd.DataFrame([
             {k: v for k, v in r.items() if k != 'model'} for r in results
         ])
-
-
         self.satellite.xgb = self
 
 
@@ -369,7 +397,7 @@ def train_segmented_models_with_search(satellite, break_times, model_class, mode
         print(f"\n Segment {i+1}: {start.date()} ~ {end.date()}")
 
         # Grid search
-        model = model_class(sub_sat)
+        model = model_class(sub_sat, **model_kwargs)
         if model.name == "ARIMA":
             model.grid_search(model_grid, buffer)
         elif model.name == "XGBoost":
